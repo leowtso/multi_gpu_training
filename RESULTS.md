@@ -106,7 +106,7 @@ Rule of thumb confirmed: fp32 master weights + grads + Adam = 16 B/param, so DDP
 | Elastic 4 → 2 GPUs (`scripts/elastic_test.sh`) | resumed from step 20 on 2 GPUs (DCP reshards model + optimizer; loader maps global sample 10,240 to the new world size; grad accumulation doubles); loss @20/25: identical, @39: 7.1442 vs 7.1445 |
 | CPU/gloo tests (`tests/`) | DDP and FSDP losses equal single-process to 4 decimals; kill+resume and 2→1 elastic resume reproduce the uninterrupted curve exactly |
 
-Bugs found and fixed along the way:
+Bugs found and fixed along the way (full debugging notes in [DEBUGGING.md](DEBUGGING.md)):
 - **torchrun restart race (torch 2.15):** restarted workers reuse the agent's TCPStore and could read the dead attempt's
   gloo peer addresses (~50% of restarts failed with `connectFullMesh ... Connection refused`). Fix: per-attempt
   `PrefixStore` (`parallel.py::_attempt_scoped_store`); 8/8 restarts succeed.
