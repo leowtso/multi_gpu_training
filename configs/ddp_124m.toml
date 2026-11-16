@@ -1,0 +1,10 @@
+# DDP: full model replica per GPU, gradients all-reduced once per optimizer step.
+# Same global batch as the single-GPU baseline, so grad_accum shrinks with world size.
+tag = "ddp-124m"
+strategy = "ddp"
+model = "124m"
+micro_bs = 8
+batch_tokens = 524288
+max_steps = 200
+compile = true
+bucket_cap_mb = 25

@@ -4,7 +4,8 @@ __pycache__/
 build/
 dist/
 wheels/
-data/
+data/*
+!data/*.py
 checkpoints/
 traces/
 results/
@@ -12,3 +13,7 @@ results/
 
 # Virtual environments
 .venv
+
+# Secrets
+.env
+nccl-tests/

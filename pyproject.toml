@@ -7,7 +7,21 @@ requires-python = ">=3.13"
 dependencies = [
     "datasets>=5.2.0",
     "numpy>=2.5.4",
+    "nvidia-ml-py>=13.615.71",
     "tiktoken>=0.14.0",
     "torch>=2.15.0",
     "tqdm>=4.70.1",
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu132"
+url = "https://download.pytorch.org/whl/cu132"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu132" }
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
 ]

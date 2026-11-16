@@ -1,0 +1,9 @@
+# FSDP2 (ZeRO-3 / FULL_SHARD) on the same model: compare throughput and memory with DDP.
+tag = "fsdp-124m"
+strategy = "fsdp"
+model = "124m"
+micro_bs = 8
+batch_tokens = 524288
+max_steps = 200
+compile = true
+reshard_after_forward = true

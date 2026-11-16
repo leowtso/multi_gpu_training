@@ -1,0 +1,12 @@
+# Model that does not fit with DDP on a 24 GB GPU (~23 GiB of fp32 weights+grads+Adam
+# alone) but fits once FSDP shards that state across GPUs.
+tag = "fsdp-1.5b"
+strategy = "fsdp"
+model = "1.5b"
+micro_bs = 4
+batch_tokens = 524288
+max_steps = 50
+compile = true
+ac = true
+reshard_after_forward = true
+peak_tflops = 165.0   # set to the measured bf16 matmul TFLOPS of the rented GPU

@@ -1,0 +1,8 @@
+# Single-GPU baseline: GPT-2 124M, bf16 autocast, torch.compile, 0.5M-token batches.
+tag = "single-124m"
+strategy = "single"
+model = "124m"
+micro_bs = 8
+batch_tokens = 524288
+max_steps = 200
+compile = true
