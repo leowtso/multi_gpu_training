@@ -15,8 +15,13 @@ uv run python scripts/gpucheck.py | tee -a results/hardware.txt   # use its TFLO
 [[ -f data/train.bin ]] || uv run python data/prepare.py --train-tokens 100e6
 
 # NCCL all-reduce bandwidth: the ceiling for DDP gradient sync on this box.
+# Build against the NCCL that PyTorch ships in the venv (nvidia-nccl wheel), so we
+# benchmark the exact library training uses and need no system libnccl-dev.
+NCCL_HOME=$(uv run python -c "import nvidia.nccl as m; print(list(m.__path__)[0])")
+ln -sf libnccl.so.2 "$NCCL_HOME/lib/libnccl.so"   # wheel ships only the soname; the linker wants libnccl.so
+[[ -d nccl-tests ]] || git clone --depth 1 https://github.com/NVIDIA/nccl-tests.git
 if [[ ! -x nccl-tests/build/all_reduce_perf ]]; then
-  git clone --depth 1 https://github.com/NVIDIA/nccl-tests.git
-  make -C nccl-tests -j CUDA_HOME="${CUDA_HOME:-/usr/local/cuda}"
+  make -C nccl-tests -j CUDA_HOME="${CUDA_HOME:-/usr/local/cuda}" NCCL_HOME="$NCCL_HOME"
 fi
-nccl-tests/build/all_reduce_perf -b 8M -e 1G -f 2 -g "$(nvidia-smi -L | wc -l)" | tee results/nccl_allreduce.txt
+LD_LIBRARY_PATH="$NCCL_HOME/lib:${LD_LIBRARY_PATH:-}" \
+  nccl-tests/build/all_reduce_perf -b 8M -e 1G -f 2 -g "$(nvidia-smi -L | wc -l)" | tee results/nccl_allreduce.txt

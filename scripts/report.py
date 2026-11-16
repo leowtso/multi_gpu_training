@@ -25,6 +25,7 @@ def main():
     p.add_argument("--model")
     p.add_argument("--since", help="only runs at or after this timestamp")
     p.add_argument("--last", type=int, help="only the N most recent runs")
+    p.add_argument("--out", help="also write the table to this markdown file (e.g. results/report.md)")
     args = p.parse_args()
 
     with open(args.file) as f:
@@ -46,10 +47,9 @@ def main():
             k = key(r)
             baseline[k] = max(baseline.get(k, 0), r["tokens_per_s_per_gpu"] if "tokens_per_s_per_gpu" in r else r["tokens_per_s"])
 
-    cols = ["tag", "strategy", "GPUs", "model", "options", "tok/s", "tok/s/GPU", "scaling eff.",
+    cols = ["time", "tag", "strategy", "GPUs", "model", "options", "steps", "tok/s", "tok/s/GPU", "scaling eff.",
             "MFU", "peak mem/GPU (GiB)", "GPU util %", "val loss"]
-    print("| " + " | ".join(cols) + " |")
-    print("|" + "---|" * len(cols))
+    lines = ["| " + " | ".join(cols) + " |", "|" + "---|" * len(cols)]
     for r in runs:
         world = r.get("world_size", 1)
         base = baseline.get(key(r))
@@ -68,11 +68,13 @@ def main():
         opts.append(f"mbs {r['micro_bs']}")
         gpu = r["gpu"].replace("NVIDIA ", "").replace("GeForce ", "")
         row = [
+            r["time"][5:16],  # MM-DD HH:MM
             r.get("tag") or "",
             r["strategy"],
             f"{world}× {gpu}" + (f" ({r['nodes']} nodes)" if r.get("nodes", 1) > 1 else ""),
             f"{r['model']} ({r['params_m']}M)",
             ", ".join(opts),
+            str(r.get("steps", "")),
             f"{r['tokens_per_s']:,}",
             f"{r.get('tokens_per_s_per_gpu', r['tokens_per_s']):,}",
             fmt(eff, ".0%"),
@@ -81,7 +83,16 @@ def main():
             fmt(r.get("gpu_util")),
             fmt(r.get("val_loss")),
         ]
-        print("| " + " | ".join(row) + " |")
+        lines.append("| " + " | ".join(row) + " |")
+
+    table = "\n".join(lines)
+    print(table)
+    if args.out:
+        os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
+        with open(args.out, "w") as f:
+            f.write(f"Generated from {os.path.relpath(args.file, ROOT)}"
+                    + (f" (since {args.since})" if args.since else "") + "\n\n" + table + "\n")
+        print(f"\nwrote {args.out}")
 
 
 if __name__ == "__main__":
