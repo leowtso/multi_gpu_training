@@ -52,9 +52,9 @@ def build_parser():
     p.add_argument("--strategy", choices=["single", "ddp", "fsdp"], default="single")
     p.add_argument("--precision", choices=["bf16", "fp32"], default="bf16")
     p.add_argument("--compile", action=argparse.BooleanOptionalAction, default=False)
-    p.add_argument("--compile-scope", choices=["auto", "whole", "per-block"], default="auto",
-                   help="whole: torch.compile(model); per-block: each block + head/loss separately. "
-                        "auto = per-block for fsdp (FSDP2 hooks break a whole-model graph), whole otherwise")
+    p.add_argument("--compile-scope", choices=["whole", "per-block"], default="whole",
+                   help="whole: torch.compile(model); per-block: each block + head/loss separately "
+                        "(torchtitan-style). Measured on 4x A100 FSDP 124M: whole 685k tok/s, per-block 664k")
     p.add_argument("--ac", action=argparse.BooleanOptionalAction, default=False, help="activation checkpointing per block")
     p.add_argument("--bucket-cap-mb", type=float, default=25.0, help="DDP gradient bucket size")
     p.add_argument("--reshard-after-forward", action=argparse.BooleanOptionalAction, default=True,
@@ -156,8 +156,6 @@ def make_profiler(args, info):
 
 def main():
     args = get_args()
-    if args.compile_scope == "auto":
-        args.compile_scope = "per-block" if args.strategy == "fsdp" else "whole"
     info = setup_distributed(args.device)
     log = print if info.is_main else (lambda *a, **k: None)
     cuda = info.device.type == "cuda"

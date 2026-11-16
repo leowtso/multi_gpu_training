@@ -113,9 +113,14 @@ class GPT(nn.Module):
         return self.head(x, targets)
 
     def head(self, x, targets=None):
-        """Final norm + LM head + loss. A separate method so it can be compiled on
-        its own (per-block compile for FSDP): fusing log-softmax + cross-entropy
-        avoids materialising the fp32 B*T*vocab logits gradient path eagerly."""
+        """Final norm + LM head + loss, deliberately a separate method.
+
+        Under FSDP2, Dynamo graph-breaks at each sharded block's hooks *inside* the
+        `for block in self.blocks` loop, and a graph break inside a loop makes it run
+        the rest of forward() eagerly. With the head inlined in forward(), the LM
+        head + cross-entropy ran uncompiled (unfused softmax kernels, fp32 logits
+        materialised). As its own function it is compiled as a separate frame.
+        4x A100, 124M FSDP: 611k -> 685k tok/s (+12%), 7.03 -> 4.03 GiB/GPU."""
         logits = self.lm_head(self.ln_f(x))
         if targets is None:
             return logits

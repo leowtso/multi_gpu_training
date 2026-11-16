@@ -87,10 +87,9 @@ def apply_strategy(model, args, info: DistInfo):
 
     if args.compile and args.compile_scope == "per-block":
         # Compile each block and the head+loss separately (torchtitan's approach),
-        # *before* fully_shard. Compiling the whole FSDP2 model instead makes Dynamo
-        # break the graph at FSDP's root hooks, so the LM head and loss ran eager:
-        # unfused softmax kernels and fp32 logits materialised (seen in the A100 trace).
-        # Module.compile() is in place, so state-dict keys don't change.
+        # *before* fully_shard. Module.compile() is in place, so state-dict keys don't
+        # change. Kept as an option: after GPT.head was split out (see model.py),
+        # whole-model compile was 3% faster on 4x A100 FSDP, so it is the default.
         for block in model.blocks:
             block.compile()
         model.head = torch.compile(model.head)

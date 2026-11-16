@@ -26,6 +26,7 @@ NGPU=4 scripts/launch.sh configs/fsdp_124m.toml --max-steps 50
 scripts/launch.sh configs/fsdp_1.5b.toml                        # model too big for DDP
 scripts/scale_sweep.sh 30                                       # single + DDP/FSDP at 1,2,4,8 GPUs
 scripts/fault_test.sh                                           # kill a rank, auto-resume, compare loss
+scripts/elastic_test.sh                                         # checkpoint on 4 GPUs, resume on 2
 uv run python scripts/report.py                                 # markdown results table
 ```
 
@@ -51,6 +52,8 @@ checkpoint blocking time, loss and val loss.
 | `--sync-every-microstep` | ablation: all-reduce on every micro-step instead of `no_sync` |
 | `--ckpt-every`, `--async-ckpt`, `--resume` | DCP checkpointing / resume |
 | `--keep-last N`, `--[no-]keep-best` | retention: keep the newest N + the lowest-val-loss checkpoint, delete the rest |
+| `--compile-scope whole\|per-block` | whole-model vs per-block `torch.compile` |
+| `--stop-at-step` | exit cleanly mid-schedule (preemption; LR schedule unchanged) |
 | `--fail-at-step` | fault injection (last rank exits on the first attempt) |
 | `--peak-tflops` | MFU denominator: set to `scripts/gpucheck.py`'s number for the GPU |
 
@@ -65,14 +68,15 @@ checkpoint blocking time, loss and val loss.
 | `checkpoint.py` | DCP save/load (sharded, async, atomic `latest` marker) |
 | `metrics.py` | NVML GPU-utilisation sampler |
 | `train.py` | training loop, eval, profiler, results logging |
-| `scripts/` | launch, sweep, fault test, cloud setup, report, gpucheck |
+| `scripts/` | launch, sweep, fault + elastic tests, cloud setup, report, gpucheck, trace_stats |
 | `tests/` | CPU distributed correctness + resume tests |
 
 ## Roadmap
 
 - [x] Single-GPU baseline, measured and profiled
 - [x] DDP + FSDP2, verified equal to single-process on CPU
-- [x] DCP checkpointing, kill + auto-resume (CPU)
-- [ ] Multi-GPU box: scaling sweep, DDP vs FSDP memory, bottleneck before/after
-- [ ] NVLink box: 2D parallelism (FSDP + TP), PCIe vs NVLink comparison
-- [ ] Stretch: batch-1 inference latency (eager vs compile + CUDA graphs vs TensorRT)
+- [x] DCP checkpointing with retention, kill + auto-resume, elastic resume on fewer GPUs
+- [x] 4× A100 NVLink: scaling sweep, NVLink-off comparison, FSDP compile fix, 6.7B DDP-vs-FSDP memory, AC trade-off
+- [ ] 2D parallelism (FSDP + tensor parallel) on an 8-GPU NVLink node
+- [ ] Meta-device init (build the model sharded, not full-size on every GPU) for >7B
+- [ ] Batch-1 inference latency (eager vs compile + CUDA graphs vs TensorRT)
