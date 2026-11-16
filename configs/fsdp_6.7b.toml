@@ -1,0 +1,17 @@
+# Memory demo for 80 GB GPUs (A100/H100). fp32 weights+grads+Adam = 16 B/param:
+#   6.65B * 16 B ~= 99 GiB per GPU with DDP  -> OOM on any single 80 GB GPU
+#   FSDP ZeRO-3 on 4 GPUs: ~25 GiB/GPU of sharded state + activations (AC on) -> fits
+# The full fp32 model (~27 GB) is built on every GPU before sharding; fine at 80 GB,
+# a meta-device init would be needed on smaller cards.
+#   NGPU=4 scripts/launch.sh configs/fsdp_6.7b.toml --peak-tflops $PEAK
+#   NGPU=4 scripts/launch.sh configs/fsdp_6.7b.toml --strategy ddp --tag ddp-6.7b --max-steps 5 --peak-tflops $PEAK
+tag = "fsdp-6.7b"
+strategy = "fsdp"
+model = "6.7b"
+micro_bs = 4
+batch_tokens = 524288
+max_steps = 30
+compile = true
+ac = true
+reshard_after_forward = true
+eval_every = 0

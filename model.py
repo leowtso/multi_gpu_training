@@ -30,6 +30,7 @@ PRESETS = {
     "774m": dict(n_layer=36, n_head=20, n_embd=1280),
     "1.5b": dict(n_layer=48, n_head=25, n_embd=1600),
     "2.7b": dict(n_layer=32, n_head=32, n_embd=2560),
+    "6.7b": dict(n_layer=32, n_head=32, n_embd=4096),  # GPT-3 6.7B shape
 }
 
 
