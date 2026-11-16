@@ -56,7 +56,7 @@ def main():
         eff = r["tokens_per_s"] / (world * base) if base else None
         opts = [r.get("precision", "bf16")]
         if r.get("compile"):
-            opts.append("compile")
+            opts.append("compile per-block" if r.get("compile_scope") == "per-block" else "compile")
         if r.get("ac"):
             opts.append("AC")
         if r.get("strategy") == "fsdp":

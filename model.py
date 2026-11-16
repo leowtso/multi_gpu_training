@@ -110,6 +110,12 @@ class GPT(nn.Module):
         x = self.wte(idx) + self.wpe(pos)
         for block in self.blocks:
             x = block(x)
+        return self.head(x, targets)
+
+    def head(self, x, targets=None):
+        """Final norm + LM head + loss. A separate method so it can be compiled on
+        its own (per-block compile for FSDP): fusing log-softmax + cross-entropy
+        avoids materialising the fp32 B*T*vocab logits gradient path eagerly."""
         logits = self.lm_head(self.ln_f(x))
         if targets is None:
             return logits

@@ -85,6 +85,16 @@ def apply_strategy(model, args, info: DistInfo):
         for i, block in enumerate(model.blocks):
             model.blocks[i] = checkpoint_wrapper(block)
 
+    if args.compile and args.compile_scope == "per-block":
+        # Compile each block and the head+loss separately (torchtitan's approach),
+        # *before* fully_shard. Compiling the whole FSDP2 model instead makes Dynamo
+        # break the graph at FSDP's root hooks, so the LM head and loss ran eager:
+        # unfused softmax kernels and fp32 logits materialised (seen in the A100 trace).
+        # Module.compile() is in place, so state-dict keys don't change.
+        for block in model.blocks:
+            block.compile()
+        model.head = torch.compile(model.head)
+
     if args.strategy == "single":
         assert info.world_size == 1, "strategy=single with >1 process; use ddp or fsdp"
         return model
