@@ -50,6 +50,7 @@ checkpoint blocking time, loss and val loss.
 | `--[no-]reshard-after-forward` | FSDP ZeRO-3 (default) vs ZeRO-2 |
 | `--sync-every-microstep` | ablation: all-reduce on every micro-step instead of `no_sync` |
 | `--ckpt-every`, `--async-ckpt`, `--resume` | DCP checkpointing / resume |
+| `--keep-last N`, `--[no-]keep-best` | retention: keep the newest N + the lowest-val-loss checkpoint, delete the rest |
 | `--fail-at-step` | fault injection (last rank exits on the first attempt) |
 | `--peak-tflops` | MFU denominator: set to `scripts/gpucheck.py`'s number for the GPU |
 

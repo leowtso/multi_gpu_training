@@ -70,6 +70,9 @@ def build_parser():
     p.add_argument("--ckpt-dir", default="", help="default: checkpoints/<tag or model-strategy>")
     p.add_argument("--ckpt-every", type=int, default=0, help="0 disables")
     p.add_argument("--async-ckpt", action="store_true", help="DCP async_save (distributed only)")
+    p.add_argument("--keep-last", type=int, default=1, help="number of most recent checkpoints to keep")
+    p.add_argument("--keep-best", action=argparse.BooleanOptionalAction, default=True,
+                   help="also keep the checkpoint with the lowest val loss (needs eval on checkpoint steps)")
     p.add_argument("--resume", action=argparse.BooleanOptionalAction, default=False, help="resume from the latest checkpoint in ckpt-dir, if any")
     p.add_argument("--fail-at-step", type=int, default=-1,
                    help="fault injection: last rank hard-exits at this step on the first attempt")
@@ -181,7 +184,11 @@ def main():
     start_step = 0
     if args.ckpt_every or args.resume:
         ckpt_dir = args.ckpt_dir or os.path.join("checkpoints", args.tag or f"{args.model}-{args.strategy}")
-        ckpt = Checkpointer(ckpt_dir, info, async_save=args.async_ckpt)
+        ckpt = Checkpointer(ckpt_dir, info, async_save=args.async_ckpt,
+                            keep_last=args.keep_last, keep_best=args.keep_best)
+        if args.keep_best and args.ckpt_every and (not args.eval_every or args.ckpt_every % args.eval_every):
+            log(f"warning: keep_best needs ckpt_every ({args.ckpt_every}) to be a multiple of eval_every "
+                f"({args.eval_every}); checkpoints without a val loss can't be ranked, only keep_last applies")
         if args.resume:
             t0 = time.perf_counter()
             state = ckpt.load(model, optimizer)
@@ -198,7 +205,7 @@ def main():
         torch.cuda.reset_peak_memory_stats()
     util = GpuUtilSampler(info.device)
 
-    step_times, ckpt_block_s, val_loss, loss_val = [], [], None, float("nan")
+    step_times, ckpt_block_s, val_loss, val_step, loss_val = [], [], None, -1, float("nan")
     x, y = train_loader.next()
     with make_profiler(args, info) as prof:
         for step in range(start_step, args.max_steps):
@@ -246,9 +253,11 @@ def main():
                     f"| {dt * 1000:7.0f} ms | {tps / 1e3:7.1f}k tok/s | MFU {mfu:5.1%} | mem/gpu {mem:.2f} GiB")
 
             done = step == args.max_steps - 1
-            if args.eval_every and (step % args.eval_every == 0 or done) and step > 0:
+            # Eval/checkpoint "after N steps" (step + 1), so with ckpt_every a multiple of
+            # eval_every every checkpoint carries the val loss of exactly those weights.
+            if args.eval_every and ((step + 1) % args.eval_every == 0 or done):
                 util.pause()
-                val_loss = evaluate(train_model, val_loader, args.eval_iters, autocast, info)
+                val_loss, val_step = evaluate(train_model, val_loader, args.eval_iters, autocast, info), step
                 log(f"step {step:5d} | val loss {val_loss:.4f}")
                 util.start()
 
@@ -256,7 +265,8 @@ def main():
                 util.pause()
                 # x, y for the next step were already fetched, so one micro-batch
                 # is "in hand": save cursor - 1 so resume re-fetches exactly it.
-                state = {"step": step + 1, "loader": {"cursor": train_loader.cursor - 1}}
+                state = {"step": step + 1, "loader": {"cursor": train_loader.cursor - 1},
+                         "val_loss": val_loss if val_step == step else None}
                 blocked = ckpt.save(model, optimizer, state)
                 ckpt_block_s.append(blocked)
                 log(f"step {step:5d} | checkpoint step_{step + 1:06d} ({'async' if ckpt.async_save else 'sync'}, "

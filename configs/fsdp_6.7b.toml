@@ -4,7 +4,12 @@
 # The full fp32 model (~27 GB) is built on every GPU before sharding; fine at 80 GB,
 # a meta-device init would be needed on smaller cards.
 #   NGPU=4 scripts/launch.sh configs/fsdp_6.7b.toml --peak-tflops $PEAK
-#   NGPU=4 scripts/launch.sh configs/fsdp_6.7b.toml --strategy ddp --tag ddp-6.7b --max-steps 5 --peak-tflops $PEAK
+#   NGPU=4 scripts/launch.sh configs/fsdp_6.7b.toml --strategy ddp --tag ddp-6.7b --max-steps 5 --ckpt-every 0 --peak-tflops $PEAK
+#
+# Checkpoints: ~80 GB each (6.65B * (4 B fp32 weights + 8 B Adam)), written as 4 shards in
+# parallel. Retention keeps the latest + the best-by-val-loss one; peak disk is 3 checkpoints
+# (latest, older best, one being written) = ~240 GB worst case, ~160 GB typical.
+# -> container disk 250 GB. Add --async-ckpt only if the pod has >~100 GB of free host RAM.
 tag = "fsdp-6.7b"
 strategy = "fsdp"
 model = "6.7b"
@@ -14,4 +19,8 @@ max_steps = 30
 compile = true
 ac = true
 reshard_after_forward = true
-eval_every = 0
+eval_every = 10
+eval_iters = 5
+ckpt_every = 10       # multiple of eval_every so each checkpoint has a val loss
+keep_last = 1
+keep_best = true

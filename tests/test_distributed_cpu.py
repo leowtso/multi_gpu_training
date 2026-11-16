@@ -65,3 +65,34 @@ def test_kill_and_resume(single_losses):
     got = losses(log)
     for step in range(3, 8):
         assert got[step] == pytest.approx(single_losses[step], abs=2e-4), f"step {step}"
+
+
+def test_checkpoint_retention_keeps_last_and_best(tmp_path):
+    """Unit test of pruning: val losses 3, 1, 2, 4 -> keep step 2 (best) and step 4 (last)."""
+    import torch
+
+    sys.path.insert(0, ROOT)
+    from checkpoint import Checkpointer
+    from parallel import DistInfo
+
+    model = torch.nn.Linear(4, 4)
+    opt = torch.optim.AdamW(model.parameters())
+    info = DistInfo(False, 0, 0, 1, 1, torch.device("cpu"))
+    ckpt = Checkpointer(str(tmp_path), info, keep_last=1, keep_best=True)
+    for step, val in zip([1, 2, 3, 4], [3.0, 1.0, 2.0, 4.0]):
+        ckpt.save(model, opt, {"step": step, "loader": {"cursor": step}, "val_loss": val})
+        model.weight.data.add_(1.0)  # make each checkpoint distinguishable
+    assert sorted(d for d in os.listdir(tmp_path) if d.startswith("step_")) == ["step_000002", "step_000004"]
+    assert ckpt.best["name"] == "step_000002"
+    assert ckpt.latest().endswith("step_000004")
+
+    # A restarted job re-reads best.json and still protects the old best.
+    ckpt2 = Checkpointer(str(tmp_path), info, keep_last=1, keep_best=True)
+    ckpt2.save(model, opt, {"step": 5, "loader": {"cursor": 5}, "val_loss": 5.0})
+    assert sorted(d for d in os.listdir(tmp_path) if d.startswith("step_")) == ["step_000002", "step_000005"]
+
+    # Resume loads the latest checkpoint's weights.
+    w = model.weight.detach().clone()
+    model.weight.data.zero_()
+    assert ckpt2.load(model, opt)["step"] == 5
+    assert torch.equal(model.weight, w)
