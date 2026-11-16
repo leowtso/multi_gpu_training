@@ -13,6 +13,7 @@ Usage:
 
 import argparse
 import json
+import sys
 import os
 
 import numpy as np
@@ -72,3 +73,8 @@ def main():
 
 if __name__ == "__main__":
     main()
+    # The streaming dataset keeps a background thread prefetching more shards; on
+    # some machines (seen on a 128-core pod) the interpreter then hangs at exit
+    # waiting for it. All output is written and closed by now, so exit hard.
+    sys.stdout.flush()
+    os._exit(0)
