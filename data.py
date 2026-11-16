@@ -48,8 +48,22 @@ class TokenLoader:
             buf = buf.pin_memory().to(self.device, non_blocking=True)
         return buf[:, :-1], buf[:, 1:]
 
-    def state_dict(self):
-        return {"cursor": self.cursor}
+    def state_dict(self, in_hand: int = 0):
+        """Position as *global samples consumed*, so it survives a change of
+        world size or micro-batch (elastic resume). `in_hand` = micro-batches
+        already fetched but not yet trained on (the training loop prefetches one)."""
+        return {"samples": (self.cursor - in_hand) * self.world_size * self.B}
 
     def load_state_dict(self, state):
-        self.cursor = int(state["cursor"])
+        if "samples" not in state:  # plain per-rank cursor (also used to rewind the val loader)
+            self.cursor = int(state["cursor"])
+            return
+        # Micro-step c covers global samples [c*W*B, (c+1)*W*B) across all ranks, so the
+        # same global position maps to cursor = samples / (W*B) under any (W, B) that
+        # divides it, and the resumed run sees exactly the samples a non-stop run would.
+        per_step = self.world_size * self.B
+        samples = int(state["samples"])
+        if samples % per_step:
+            raise ValueError(f"cannot resume at global sample {samples} with world_size*micro_bs={per_step}; "
+                             "pick a micro-batch / GPU count that divides it")
+        self.cursor = samples // per_step

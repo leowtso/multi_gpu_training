@@ -77,6 +77,8 @@ def build_parser():
     p.add_argument("--keep-best", action=argparse.BooleanOptionalAction, default=True,
                    help="also keep the checkpoint with the lowest val loss (needs eval on checkpoint steps)")
     p.add_argument("--resume", action=argparse.BooleanOptionalAction, default=False, help="resume from the latest checkpoint in ckpt-dir, if any")
+    p.add_argument("--stop-at-step", type=int, default=-1,
+                   help="exit cleanly after this many steps (simulates preemption); LR schedule still uses max-steps")
     p.add_argument("--fail-at-step", type=int, default=-1,
                    help="fault injection: last rank hard-exits at this step on the first attempt")
     # misc
@@ -203,6 +205,9 @@ def main():
                 start_step = state["step"]
                 train_loader.load_state_dict(state["loader"])
                 log(f"resumed from {ckpt.latest()} at step {start_step} ({time.perf_counter() - t0:.1f}s)")
+                if state.get("world_size", info.world_size) != info.world_size:
+                    log(f"elastic resume: checkpoint written by {state['world_size']} ranks, now {info.world_size}; "
+                        f"DCP resharded model/optimizer, loader continues at global sample {state['loader']['samples']}")
             else:
                 log(f"--resume: no checkpoint in {ckpt_dir}, starting fresh")
 
@@ -215,7 +220,8 @@ def main():
     step_times, ckpt_block_s, val_loss, val_step, loss_val = [], [], None, -1, float("nan")
     x, y = train_loader.next()
     with make_profiler(args, info) as prof:
-        for step in range(start_step, args.max_steps):
+        end_step = args.stop_at_step if 0 < args.stop_at_step < args.max_steps else args.max_steps
+        for step in range(start_step, end_step):
             if step == args.fail_at_step and restart_count == 0 and info.rank == info.world_size - 1:
                 print(f"[rank {info.rank}] fault injection: hard exit at step {step}", flush=True)
                 os._exit(1)
@@ -272,7 +278,8 @@ def main():
                 util.pause()
                 # x, y for the next step were already fetched, so one micro-batch
                 # is "in hand": save cursor - 1 so resume re-fetches exactly it.
-                state = {"step": step + 1, "loader": {"cursor": train_loader.cursor - 1},
+                state = {"step": step + 1, "loader": train_loader.state_dict(in_hand=1),
+                         "world_size": info.world_size, "micro_bs": args.micro_bs,
                          "val_loss": val_loss if val_step == step else None}
                 blocked = ckpt.save(model, optimizer, state)
                 ckpt_block_s.append(blocked)

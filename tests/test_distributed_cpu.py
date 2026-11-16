@@ -96,3 +96,18 @@ def test_checkpoint_retention_keeps_last_and_best(tmp_path):
     model.weight.data.zero_()
     assert ckpt2.load(model, opt)["step"] == 5
     assert torch.equal(model.weight, w)
+
+
+def test_elastic_resume_on_fewer_ranks(single_losses):
+    """Checkpoint with 2 FSDP ranks, resume with 1 rank (DCP reshards on load; the loader
+    maps its global sample position to the new world size). Losses must continue exactly."""
+    shutil.rmtree(os.path.join(ROOT, "checkpoints", "test-elastic"), ignore_errors=True)
+    run(torchrun("--strategy", "fsdp", "--micro-bs", "4", "--tag", "test-elastic", "--ckpt-every", "4",
+                 "--stop-at-step", "4"))
+    log = run(torchrun("--strategy", "fsdp", "--micro-bs", "8", "--tag", "test-elastic", "--resume",
+                       "--max-steps", "8", nproc=1))
+    assert "elastic resume: checkpoint written by 2 ranks, now 1" in log
+    got = losses(log)
+    assert min(got) == 4
+    for step in range(4, 8):
+        assert got[step] == pytest.approx(single_losses[step], abs=2e-4), f"step {step}"
