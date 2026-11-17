@@ -130,12 +130,7 @@ can then grow in place instead of needing a new contiguous block.
 | Wrong scaling efficiency in `report.py` | The baseline included world-size-1 DDP/FSDP runs and mixed eager with compiled runs | Baseline = `strategy == "single"` only, keyed on model, GPU, micro-batch, precision, sequence length and compile |
 | `git` refused to run on the pod ("dubious ownership") | `rsync` preserved the local UID | `chown -R root:root` on the checkout |
 
-## Things that looked like bugs but weren't
-
-- **Only GPU 0 busy at the start of the sweep:** the sweep runs the single-GPU baseline first. All 4 GPUs
-  only light up in the 4-GPU runs.
-- **`nvidia-smi` shows 10.6 GB used while the log says 5.5 GiB:** `nvidia-smi` counts everything
-  reserved (caching allocator, CUDA context, compile workspaces); the log counts live tensors.
+## Notes
+- **`nvidia-smi` shows 10.6 GB used while the log says 5.5 GiB:** `nvidia-smi` counts everything reserved (caching allocator, CUDA context, compile workspaces); the log counts live tensors.
 - **The 6.7B DDP OOM:** expected. 16 B/param × 6.65B ≈ 99 GiB exceeds 80 GB. This is the point of the FSDP comparison.
-- **30–37% idle GPU in the profiles:** profiled steps take ~880 ms vs ~575 ms unprofiled, so most of
-  that idle time is profiler overhead, not a training bottleneck.
+- **30–37% idle GPU in the profiles:** profiled steps take ~880 ms vs ~575 ms unprofiled, so most of that idle time is profiler overhead, not a training bottleneck.
